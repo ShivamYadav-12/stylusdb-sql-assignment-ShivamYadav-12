@@ -16,18 +16,17 @@ function parseQuery(query) {
 }
 function parseWhereClause(whereString) {
   try {
-    const conditions = whereString.split(/ AND | OR /i);
-    return conditions.map((condition) => {
-      const [field, operator, value] = condition.split(/\s+/);
-      if (field && operator && value) {
-        return { field, operator, value };
-      } else {
-        throw new Error("Invalid condition format");
+    const conditionRegex = /(.*?)(=|!=|>|<|>=|<=)(.*)/;
+    return whereString.split(/ AND | OR /i).map((conditionString) => {
+      const match = conditionString.match(conditionRegex);
+      if (match) {
+        const [, field, operator, value] = match;
+        return { field: field.trim(), operator, value: value.trim() };
       }
+      throw new Error("Invalid WHERE clause format");
     });
   } catch (error) {
     console.error("Error parsing where clause:", error.message);
-    //return [];// or handle the error in another appropriate way
   }
 }
 
