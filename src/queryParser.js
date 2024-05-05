@@ -1,78 +1,111 @@
-function parseQuery(query) {
-  // First, let's trim the query to remove any leading/trailing whitespaces
-  query = query.trim();
-
-  // Initialize variables for different parts of the query
-  let selectPart, fromPart;
-
-  // Split the query at the WHERE clause if it exists
-  const whereSplit = query.split(/\sWHERE\s/i);
-  query = whereSplit[0]; // Everything before WHERE clause
-
-  // WHERE clause is the second part after splitting, if it exists
-  const whereClause = whereSplit.length > 1 ? whereSplit[1].trim() : null;
-
-  // Split the remaining query at the JOIN clause if it exists
-  const joinSplit = query.split(/\sINNER JOIN\s/i);
-  selectPart = joinSplit[0].trim(); // Everything before JOIN clause
-
-  // JOIN clause is the second part after splitting, if it exists
-  const joinPart = joinSplit.length > 1 ? joinSplit[1].trim() : null;
-
-  // Parse the SELECT part
-  const selectRegex = /^SELECT\s(.+?)\sFROM\s(.+)/i;
-  const selectMatch = selectPart.match(selectRegex);
-  if (!selectMatch) {
-    throw new Error("Invalid SELECT format");
+const { parse } = require("json2csv");
+const parseJoinClause = (query) => {
+  const re =
+    /( (?<join_type>\w+) JOIN (?<join_table>\w+) ON (?<join_left>(\w|\.)+)\s?=\s?(?<join_right>(\w|\.)+))/;
+  const matches = query.match(re);
+  if (!matches) {
+    return { joinCondition: null, joinTable: null, joinType: null };
   }
-
-  const [, fields, table] = selectMatch;
-
-  // Parse the JOIN part if it exists
-  let joinTable = null,
-    joinCondition = null;
-  if (joinPart) {
-    const joinRegex = /^(.+?)\sON\s([\w.]+)\s*=\s*([\w.]+)/i;
-    const joinMatch = joinPart.match(joinRegex);
-    if (!joinMatch) {
-      throw new Error("Invalid JOIN format");
-    }
-
-    joinTable = joinMatch[1].trim();
-    joinCondition = {
-      left: joinMatch[2].trim(),
-      right: joinMatch[3].trim(),
-    };
-  }
-
-  // Parse the WHERE part if it exists
-  let whereClauses = [];
-  if (whereClause) {
-    whereClauses = parseWhereClause(whereClause);
-  }
-
   return {
-    fields: fields.split(",").map((field) => field.trim()),
-    table: table.trim(),
-    whereClauses,
-    joinTable,
-    joinCondition,
+    joinCondition: {
+      left: matches.groups.join_left,
+      right: matches.groups.join_right,
+    },
+    joinTable: matches.groups.join_table,
+    joinType: matches.groups.join_type,
   };
-}
-function parseWhereClause(whereString) {
-  try {
-    const conditionRegex = /(.*?)(=|!=|>|<|>=|<=)(.*)/;
-    return whereString.split(/ AND | OR /i).map((conditionString) => {
-      const match = conditionString.match(conditionRegex);
-      if (match) {
-        const [, field, operator, value] = match;
-        return { field: field.trim(), operator, value: value.trim() };
-      }
-      throw new Error("Invalid WHERE clause format");
-    });
-  } catch (error) {
-    console.error("Error parsing where clause:", error.message);
+};
+const parseGroupBy = (query) => {
+  const re = /(GROUP BY (?<group_fields>(\w|\.|(,\s?))+))/;
+  const matches = query.match(re);
+  if (!matches) {
+    return { groupByFields: null };
   }
-}
+  return {
+    groupByFields: matches.groups.group_fields
+      .replaceAll(/\s+/g, "")
+      .split(","),
+  };
+};
+const hasAggregateFunction = (fieldsString) => {
+  const re = /(COUNT|SUM|AVG|MIN|MAX)\((\w|\.)+|\*\)/;
+  return fieldsString.match(re) !== null;
+};
 
-module.exports = parseQuery;
+const parseLimit = (query) => {
+  const re = /LIMIT (?<limit>\d+)/;
+
+  const matches = query.match(re);
+
+  if (!matches) {
+    return null;
+  }
+
+  return parseInt(matches.groups.limit.trim());
+};
+
+const parseOrderBy = (query) => {
+  const re = /ORDER BY (?<orderby_field>(\w|\.)+) (?<orderby_order>(ASC|DESC))/;
+
+  const matches = query.match(re);
+  if (!matches) {
+    return null;
+  }
+  return {
+    field: matches.groups.orderby_field.trim(),
+    order: matches.groups.orderby_order.trim(),
+  };
+};
+const parseQuery = (query) => {
+  const re =
+    /SELECT (?<fields>(\w|\.|\(|\)|\*|\s)+(,\s?(\w|\.|\(|\)|\*|\s)+)*) FROM (?<table>\w+)( (?<join_type>\w+) JOIN (?<join_table>\w+) ON (?<join_left>(\w|\.)+)\s?=\s?(?<join_right>(\w|\.)+))?( WHERE (?<where>(\w|\.|[=><!]|\s|'|")+?)(?=\s*(GROUP BY|ORDER BY|LIMIT|UNION|\s*$)))?/;
+  //! removed full match from regex
+  const re_where_operator = /([=><!]+)/;
+  const matches = query.match(re);
+  if (!matches) {
+    throw new Error("Invalid query");
+  }
+  // console.log(matches);
+  //extracting fields
+  fields = matches.groups.fields.split(",").map((field) => field.trim());
+  //extracting where clause
+  whereClauses = [];
+  if (matches.groups.where) {
+    matches.groups.where.split(/ ?AND ?/).forEach((clause) => {
+      if (!clause.match(re_where_operator)) {
+        throw new Error("Invalid where clause");
+      }
+      const [field, operator, value] = clause.split(re_where_operator);
+      // console.log(clause.split(re_where_operator));
+      whereClauses.push({
+        field: field.trim(),
+        operator: operator.trim(),
+        value: value.replaceAll(/'|"/g, "").trim(),
+      });
+    });
+  }
+  let groupByFieldsObject = parseGroupBy(query);
+  return {
+    fields,
+    table: matches.groups.table,
+    whereClauses: whereClauses,
+    groupByFields: groupByFieldsObject.groupByFields,
+    joinCondition: matches.groups.join_table
+      ? { left: matches.groups.join_left, right: matches.groups.join_right }
+      : null,
+    joinTable: matches.groups.join_table ?? null,
+    joinType: matches.groups.join_type ?? null,
+    hasAggregateWithoutGroupBy:
+      hasAggregateFunction(matches.groups.fields) &&
+      !(groupByFieldsObject.groupByFields !== null),
+    orderByFields: parseOrderBy(query), //! assuming only one order by field for now
+    limit: parseLimit(query),
+  };
+};
+
+module.exports = { parseQuery, parseJoinClause };
+// console.log(
+//   parseQuery(
+//     `SELECT COUNT(id) as count, age FROM student GROUP BY age ORDER BY age DESC`
+//   )
+// );
