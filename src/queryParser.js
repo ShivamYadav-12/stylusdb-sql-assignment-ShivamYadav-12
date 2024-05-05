@@ -31,22 +31,16 @@ const hasAggregateFunction = (fieldsString) => {
   const re = /(COUNT|SUM|AVG|MIN|MAX)\((\w|\.)+|\*\)/;
   return fieldsString.match(re) !== null;
 };
-
 const parseLimit = (query) => {
   const re = /LIMIT (?<limit>\d+)/;
-
   const matches = query.match(re);
-
   if (!matches) {
     return null;
   }
-
   return parseInt(matches.groups.limit.trim());
 };
-
 const parseOrderBy = (query) => {
   const re = /ORDER BY (?<orderby_field>(\w|\.)+) (?<orderby_order>(ASC|DESC))/;
-
   const matches = query.match(re);
   if (!matches) {
     return null;
@@ -56,20 +50,30 @@ const parseOrderBy = (query) => {
     order: matches.groups.orderby_order.trim(),
   };
 };
+
 const parseQuery = (query) => {
   const re =
-    /SELECT (?<fields>(\w|\.|\(|\)|\*|\s)+(,\s?(\w|\.|\(|\)|\*|\s)+)*) FROM (?<table>\w+)( (?<join_type>\w+) JOIN (?<join_table>\w+) ON (?<join_left>(\w|\.)+)\s?=\s?(?<join_right>(\w|\.)+))?( WHERE (?<where>(\w|\.|[=><!]|\s|'|")+?)(?=\s*(GROUP BY|ORDER BY|LIMIT|UNION|\s*$)))?/;
+    
+    /SELECT (?<distinct>\s*DISTINCT\s*)?(?<fields>(\w|\.|\(|\)|\*|\s)+(,\s?(\w|\.|\(|\)|\*|\s)+)*) FROM (?<table>\w+)( (?<join_type>\w+) JOIN (?<join_table>\w+) ON (?<join_left>(\w|\.)+)\s?=\s?(?<join_right>(\w|\.)+))?( WHERE (?<where>(\w|\.|[=><!]|\s|'|"|%)+?)(?=\s*(GROUP BY|ORDER BY|LIMIT|UNION|\s*$)))?/;
+
   //! removed full match from regex
-  const re_where_operator = /([=><!]+)/;
+  const re_where_operator = /(LIKE|<=|>=|==|!=|<|>|=)/;
+
   const matches = query.match(re);
+
   if (!matches) {
-    throw new Error("Invalid query");
+    throw new Error(
+      "Error executing query: Query parsing error: Invalid SELECT format"
+    );
   }
   // console.log(matches);
   //extracting fields
   fields = matches.groups.fields.split(",").map((field) => field.trim());
+
   //extracting where clause
   whereClauses = [];
+  console.log(matches.groups.where);
+
   if (matches.groups.where) {
     matches.groups.where.split(/ ?AND ?/).forEach((clause) => {
       if (!clause.match(re_where_operator)) {
@@ -100,12 +104,8 @@ const parseQuery = (query) => {
       !(groupByFieldsObject.groupByFields !== null),
     orderByFields: parseOrderBy(query), //! assuming only one order by field for now
     limit: parseLimit(query),
+    isDistinct: matches.groups.distinct !== undefined,
   };
 };
 
 module.exports = { parseQuery, parseJoinClause };
-// console.log(
-//   parseQuery(
-//     `SELECT COUNT(id) as count, age FROM student GROUP BY age ORDER BY age DESC`
-//   )
-// );
