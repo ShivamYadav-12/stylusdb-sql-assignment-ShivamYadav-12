@@ -1,5 +1,4 @@
 const { readCSV, writeCSV } = require("./csvReader");
-
 const {
   parseQuery,
   parseINSERTQuery,
@@ -8,6 +7,7 @@ const {
 
 const leftJoin = (data, joinTableData, parsed_query) => {
   const JoinedData = [];
+
   data.forEach((row) => {
     let leftTableRowAddedAtLeastOnce = false;
     joinTableData.forEach((joinRow) => {
@@ -26,10 +26,13 @@ const leftJoin = (data, joinTableData, parsed_query) => {
       JoinedData.push({ ...row, ...rightObjectWithNullValues });
     }
   });
+
   return JoinedData;
 };
+
 const innerJoin = (data, joinTableData, parsed_query) => {
   const JoinedData = [];
+
   data.forEach((row) => {
     joinTableData.forEach((joinRow) => {
       if (
@@ -42,8 +45,10 @@ const innerJoin = (data, joinTableData, parsed_query) => {
   });
   return JoinedData;
 };
+
 const rightJoin = (data, joinTableData, parsed_query) => {
   const JoinedData = [];
+
   joinTableData.forEach((joinRow) => {
     let rightTableRowAddedAtLeastOnce = false;
     data.forEach((row) => {
@@ -62,10 +67,13 @@ const rightJoin = (data, joinTableData, parsed_query) => {
       JoinedData.push({ ...joinRow, ...leftObjectWithNullValues });
     }
   });
+
   return JoinedData;
 };
+
 const handleWhereClauses = (data, parsed_query) => {
   const filtered_data = [];
+
   data.forEach((row) => {
     let allWhereClausesMatch = true; //!this is for AND, make for OR also
     if (parsed_query.whereClauses.length) {
@@ -89,13 +97,17 @@ const handleWhereClauses = (data, parsed_query) => {
         }
       });
     }
+
     if (!allWhereClausesMatch) {
       return;
     }
+
     filtered_data.push(row);
   });
+
   return filtered_data;
 };
+
 const rowWithAggregates = (
   groupedDataObj,
   row,
@@ -110,16 +122,19 @@ const rowWithAggregates = (
       const aggregateFunctionField = aggregateFunction
         .split("(")[1]
         .split(")")[0];
+
       switch (aggregateFunctionName) {
         case "COUNT":
           row[aggregateFunction] = 1;
           break;
+
         case "AVG":
           row[aggregateFunction] = parseInt(row[aggregateFunctionField]);
           row[`_SUM(${aggregateFunctionField})`] = parseInt(
             row[aggregateFunctionField]
           ); //for calculating average later
           break;
+
         default:
           row[aggregateFunction] = parseInt(row[aggregateFunctionField]); //MAX,MIN,SUM
           break;
@@ -130,57 +145,71 @@ const rowWithAggregates = (
   } else {
     //for existing group
     const groupRow = groupedDataObj[groupFieldData];
+
     aggregateFunctions.forEach((aggregateFunction) => {
       //identify the aggregate function
       const aggregateFunctionName = aggregateFunction.split("(")[0]; //TODO: might need to handle lowercase aggregate functions
       const aggregateFunctionField = aggregateFunction
         .split("(")[1]
         .split(")")[0];
+
       switch (aggregateFunctionName) {
         case "COUNT":
           groupRow[aggregateFunction] += 1; //! in case of no null values, the answer for count(x) and count(*) will be same.. so this works.
           break;
+
         case "SUM":
           groupRow[aggregateFunction] += parseInt(row[aggregateFunctionField]);
           break;
+
         case "AVG":
           groupRow[`_SUM(${aggregateFunctionField})`] += parseInt(
             row[aggregateFunctionField]
           );
+
           groupRow[aggregateFunction] =
             groupRow[`_SUM(${aggregateFunctionField})`] /
             (groupRow["_count"] + 1); //groupRow["_count"]+1 as the count is increased after the switch case
+
           break;
+
         case "MAX":
           groupRow[aggregateFunction] = Math.max(
             groupRow[aggregateFunction],
             parseInt(row[aggregateFunctionField])
           );
           break;
+
         case "MIN":
           groupRow[aggregateFunction] = Math.min(
             groupRow[aggregateFunction],
             parseInt(row[aggregateFunctionField])
           );
           break;
+
         default:
           throw new Error(`Invalid aggregate function: ${aggregateFunction}`);
       }
       groupRow["_count"] += 1;
     });
+
     return groupRow;
   }
 };
+
 const applyGroupBy = (data, parsed_query) => {
   if (parsed_query.groupByFields == null) {
     return data;
   }
+
   //identifying aggregate functions
   const aggregateFunctions = [...parsed_query.fields].filter(
     (field) => field.includes("(") && field.includes(")")
   );
+
   const groupedDataObj = {};
   let groupField = parsed_query.groupByFields[0]; //!assuming only one group by field for now, change this
+
   data.forEach((row) => {
     const groupFieldData = row[groupField];
     if (groupFieldData in groupedDataObj) {
@@ -202,14 +231,18 @@ const applyGroupBy = (data, parsed_query) => {
     }
     // console.log(groupedDataObj);
   });
+
   return Object.values(groupedDataObj);
 };
+
 const applyAggrateWithoutGroupBy = (data, parsed_query) => {
   const aggregateFunctions = [...parsed_query.fields].filter(
     (field) => field.includes("(") && field.includes(")")
   );
+
   const groupedDataObj = {};
   const keyToReplaceGroupFieldData = null;
+
   data.forEach((row) => {
     if (keyToReplaceGroupFieldData in groupedDataObj) {
       groupedDataObj[keyToReplaceGroupFieldData] = rowWithAggregates(
@@ -230,14 +263,18 @@ const applyAggrateWithoutGroupBy = (data, parsed_query) => {
     }
     // console.log(groupedDataObj);
   });
+
   return Object.values(groupedDataObj);
 };
+
 const executeSELECTQuery = async (query) => {
   const parsed_query = parseQuery(query);
   // console.log("query:", parsed_query);
   let data = await readCSV(`./${parsed_query.table}.csv`);
+
   if (parsed_query.joinTable) {
     let joinTableData = await readCSV(`./${parsed_query.joinTable}.csv`);
+
     data = data.map((row) => {
       const newRow = {};
       Object.keys(row).forEach((key) => {
@@ -245,6 +282,7 @@ const executeSELECTQuery = async (query) => {
       });
       return newRow;
     });
+
     joinTableData = joinTableData.map((row) => {
       const newRow = {};
       Object.keys(row).forEach((key) => {
@@ -252,26 +290,33 @@ const executeSELECTQuery = async (query) => {
       });
       return newRow;
     });
+
     //lll
+
     switch (parsed_query.joinType) {
       case "LEFT":
         data = leftJoin(data, joinTableData, parsed_query);
         break;
+
       case "RIGHT":
         data = rightJoin(data, joinTableData, parsed_query);
         break;
+
       default:
         data = innerJoin(data, joinTableData, parsed_query);
         break;
     }
   }
+
   // console.log(data);
   data = handleWhereClauses(data, parsed_query);
+
   if (parsed_query.groupByFields != null)
     data = applyGroupBy(data, parsed_query);
   //!assuming only one group by field for now, change this
   else if (parsed_query.hasAggregateWithoutGroupBy)
     data = applyAggrateWithoutGroupBy(data, parsed_query);
+
   if (parsed_query.orderByFields) {
     data.sort((a, b) => {
       if (parsed_query.orderByFields.order == "ASC")
@@ -286,7 +331,9 @@ const executeSELECTQuery = async (query) => {
           : 1;
     });
   }
+
   let result = [];
+
   data.forEach((row) => {
     const obj = {};
     parsed_query.fields.forEach((field) => {
@@ -294,6 +341,7 @@ const executeSELECTQuery = async (query) => {
     });
     result.push(obj);
   });
+
   if (parsed_query.isDistinct) {
     result = result.filter(
       (row, index, self) =>
@@ -303,23 +351,29 @@ const executeSELECTQuery = async (query) => {
         )
     );
   }
+
   if (parsed_query.limit != null) {
     result = result.slice(0, parsed_query.limit);
   }
+
   // console.log(result);
   return result;
 };
+
 //insert
 const executeINSERTQuery = async (query) => {
   const parsed_insert_query = parseINSERTQuery(query);
   let data = await readCSV(`./${parsed_insert_query.table}.csv`);
+
   const obj = {};
+
   for (let i = 0; i < parsed_insert_query.columns.length; i++)
     [(obj[parsed_insert_query.columns[i]] = parsed_insert_query.values[i])];
+
   data.push(obj);
+
   await writeCSV(`./${parsed_insert_query.table}.csv`, data);
 };
-
 
 const executeDELETEQuery = async (query) => {
   const parsed_delete_query = parseDELETEQuery(query);
@@ -351,3 +405,15 @@ const executeDELETEQuery = async (query) => {
 };
 
 module.exports = { executeSELECTQuery, executeINSERTQuery, executeDELETEQuery };
+
+// (async () => {
+//   console.log(
+//     await executeSELECTQuery(
+//       "SELECT DISTINCT name FROM student WHERE name LIKE '%e%'"
+//     )
+//   );
+// })();
+
+// (async () => {
+//   await executeDELETEQuery("DELETE FROM sample WHERE name LIKE 'z%'");
+// })();

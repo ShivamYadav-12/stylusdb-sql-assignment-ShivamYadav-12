@@ -1,6 +1,6 @@
-const readCSV = require("../../src/csvReader");
+const { readCSV } = require("../../src/csvReader");
 const { parseQuery, parseJoinClause } = require("../../src/queryParser");
-const executeSELECTQuery = require("../../src/index");
+const { executeSELECTQuery } = require("../../src/queryExecutor");
 
 test("Read CSV File", async () => {
   const data = await readCSV("./student.csv");
@@ -62,41 +62,42 @@ test("Execute SQL Query with INNER JOIN", async () => {
       { 'student.name': 'Bob', 'enrollment.course': 'Mathematics' }
     ]
     */
-    expect(result.length).toEqual(4);
-    // toHaveProperty is not working here due to dot in the property name
-    expect(result[0]).toEqual(
-      expect.objectContaining({
-        "enrollment.course": "Mathematics",
-        "student.name": "John",
-      })
-    );
-  });
-  test("Execute SQL Query with INNER JOIN and a WHERE Clause", async () => {
-    const query =
-      "SELECT student.name, enrollment.course, student.age FROM student INNER JOIN enrollment ON student.id = enrollment.student_id WHERE student.age > 25";
-    const result = await executeSELECTQuery(query);
-    /*
-      result =  [
-        {
-          'student.name': 'John',
-          'enrollment.course': 'Mathematics',
-          'student.age': '30'
-        },
-        {
-          'student.name': 'John',
-          'enrollment.course': 'Physics',
-          'student.age': '30'
-        }
-      ]
-      */
-      expect(result.length).toEqual(2);
-      // toHaveProperty is not working here due to dot in the property name
-      expect(result[0]).toEqual(
-        expect.objectContaining({
-          "enrollment.course": "Mathematics",
-          "student.name": "John",
-        })
-    );
+  expect(result.length).toEqual(4);
+  // toHaveProperty is not working here due to dot in the property name
+  expect(result[0]).toEqual(
+    expect.objectContaining({
+      "enrollment.course": "Mathematics",
+      "student.name": "John",
+    })
+  );
+});
+
+test("Execute SQL Query with INNER JOIN and a WHERE Clause", async () => {
+  const query =
+    "SELECT student.name, enrollment.course, student.age FROM student INNER JOIN enrollment ON student.id = enrollment.student_id WHERE student.age > 25";
+  const result = await executeSELECTQuery(query);
+  /*
+    result =  [
+      {
+        'student.name': 'John',
+        'enrollment.course': 'Mathematics',
+        'student.age': '30'
+      },
+      {
+        'student.name': 'John',
+        'enrollment.course': 'Physics',
+        'student.age': '30'
+      }
+    ]
+    */
+  expect(result.length).toEqual(2);
+  // toHaveProperty is not working here due to dot in the property name
+  expect(result[0]).toEqual(
+    expect.objectContaining({
+      "enrollment.course": "Mathematics",
+      "student.name": "John",
+    })
+  );
 });
 
 test("Execute SQL Query with LEFT JOIN", async () => {
@@ -835,28 +836,30 @@ test("DISTINCT with Multiple Columns", async () => {
     { student_id: "5", course: "Biology" },
   ]);
 });
+
+// Not a good test right now
 test("DISTINCT with WHERE Clause", async () => {
-    const query = 'SELECT DISTINCT course FROM enrollment WHERE student_id = "1"';
-    const result = await executeSELECTQuery(query);
-    // Expecting courses taken by student with ID 1
-    expect(result).toEqual([{ course: "Mathematics" }, { course: "Physics" }]);
-  });
-  
-  test("DISTINCT with JOIN Operations", async () => {
-    const query =
-      "SELECT DISTINCT student.name FROM student INNER JOIN enrollment ON student.id = enrollment.student_id";
-    const result = await executeSELECTQuery(query);
-    // Expecting names of students who are enrolled in any course
-    expect(result).toEqual([
-      { "student.name": "John" },
-      { "student.name": "Jane" },
-      { "student.name": "Bob" },
-    ]);
-  });
-  
-  test("DISTINCT with ORDER BY and LIMIT", async () => {
-    const query = "SELECT DISTINCT age FROM student ORDER BY age DESC LIMIT 2";
-    const result = await executeSELECTQuery(query);
-    // Expecting the two highest unique ages
-    expect(result).toEqual([{ age: "30" }, { age: "25" }]);
-  });
+  const query = 'SELECT DISTINCT course FROM enrollment WHERE student_id = "1"';
+  const result = await executeSELECTQuery(query);
+  // Expecting courses taken by student with ID 1
+  expect(result).toEqual([{ course: "Mathematics" }, { course: "Physics" }]);
+});
+
+test("DISTINCT with JOIN Operations", async () => {
+  const query =
+    "SELECT DISTINCT student.name FROM student INNER JOIN enrollment ON student.id = enrollment.student_id";
+  const result = await executeSELECTQuery(query);
+  // Expecting names of students who are enrolled in any course
+  expect(result).toEqual([
+    { "student.name": "John" },
+    { "student.name": "Jane" },
+    { "student.name": "Bob" },
+  ]);
+});
+
+test("DISTINCT with ORDER BY and LIMIT", async () => {
+  const query = "SELECT DISTINCT age FROM student ORDER BY age DESC LIMIT 2";
+  const result = await executeSELECTQuery(query);
+  // Expecting the two highest unique ages
+  expect(result).toEqual([{ age: "30" }, { age: "25" }]);
+});
